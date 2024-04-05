@@ -1,3 +1,6 @@
 [submodule "lang-segment-anything"]
 	path = lang-segment-anything
 	url = https://github.com/luca-medeiros/lang-segment-anything
+[submodule "mmrotate"]
+	path = mmrotate
+	url = https://github.com/open-mmlab/mmrotate
