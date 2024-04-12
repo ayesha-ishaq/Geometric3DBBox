@@ -19,8 +19,10 @@ from nuscenes.utils.splits import create_splits_scenes
 from nuscenes.utils.data_classes import LidarPointCloud, Box
 from shapely.geometry import MultiPoint, box
 from nuscenes.utils.geometry_utils import view_points, transform_matrix
-from nuscenes.eval.detection.evaluate import NuScenesEval
+# from nuscenes.eval.detection.evaluate import NuScenesEval
 from nuscenes.eval.common.config import config_factory
+
+from lidar_detection_evaluation.nuscenes_eval_core import NuScenesEval
 
 import mmcv
 from mmcv.runner import load_checkpoint
@@ -388,6 +390,9 @@ def generate_nusc_data(version, dataset_dir, cfg, checkpoint, output_dir, eval_o
     val_scenes = splits_to_scene_names[val_split]
     test_scenes = splits_to_scene_names[test_split]
     result_file = output_dir / 'detection_result.json'
+    pred_dir = output_dir / 'preds'
+    gt_dir = output_dir / 'gt'
+
     if not eval_only:
         data = generate_nusc_seq_data(nusc, cfg, checkpoint, val_scenes, sequences_by_name)
         
@@ -396,18 +401,37 @@ def generate_nusc_data(version, dataset_dir, cfg, checkpoint, output_dir, eval_o
 
         print("Data written to detection_result.json successfully!")
     
-    cfg = config_factory('detection_cvpr_2019')
-    verbose = True
-    nusc_eval = NuScenesEval(
-        nusc,
-        config=cfg,
-        result_path=result_file,
-        eval_set='val',
-        output_dir=output_dir,
-        verbose=verbose
-    )
+    with open(result_file) as f:
+        result = json.load(f)
+    
+    for frame in result['results']:
+        frame_path = frame + ".txt"
+        path = pred_dir / frame_path
+        f = open(path, "a")
+        for detection in result['results'][frame]:
+            x, y, z = detection['translation']
+            w, l, h = detection['size']
+            class_name = 'vehicle'
+            rotation = Quaternion(np.array(detection['rotation'])).radians
+            score = detection['detection_score']
+            content = f"{class_name} {x} {y} {z} {l} {w} {h} {rotation} {score} \n"
+            f.write(content)
 
-    metrics = nusc_eval.main()
+    NuScenesEval(str(pred_dir), str(gt_dir), "class x y z l w h r score" , str(output_dir),
+                 max_range=0.0,
+                 min_score=0.0)
+    # cfg = config_factory('detection_cvpr_2019')
+    # verbose = True
+    # nusc_eval = NuScenesEval(
+    #     nusc,
+    #     config=cfg,
+    #     result_path=result_file,
+    #     eval_set='val',
+    #     output_dir=output_dir,
+    #     verbose=verbose
+    # )
+
+    # metrics = nusc_eval.main()
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser(description='Nuscenes data preprocessing')
