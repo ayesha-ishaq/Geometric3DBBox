@@ -32,6 +32,42 @@ from mmrotate.models import build_detector
 from mmrotate.datasets.builder import ROTATED_DATASETS
 from mmrotate.datasets.dota import DOTADataset
 
+def generate_gt_labels(nusc, gt_dir, val_scenes, sequences_by_name):
+
+    for scene_id, scene_name in enumerate(tqdm(val_scenes)):
+        scene = sequences_by_name[scene_name]
+        first_token = scene['first_sample_token']
+        last_token = scene['last_sample_token']
+        current_token = first_token
+        frame_id = 0
+        while True:
+            file_name = current_token +".txt"
+            path = gt_dir / file_name
+            open(path, "w").close()
+            f = open(path, "a")
+            current_sample = nusc.get('sample', current_token)
+            frame_ann_tokens = current_sample['anns']
+            for ann_token in frame_ann_tokens:
+                ann = nusc.get('sample_annotation', ann_token)
+                if ann['category_name'].split('.')[0] == 'vehicle':
+                    if ann['category_name'].split('.')[1] in ['car', 'bus', 'truck']:
+                        # get 2D bounding box for gt
+                        box = Box(ann['translation'],
+                                ann['size'], 
+                                Quaternion(ann['rotation']))
+                        x, y, z = box.center
+                        w, l, h = box.wlh
+                        rotation = box.orientation.radians
+                        class_name = ann['category_name'].split('.')[1]
+                        content =  f"{class_name} {x} {y} {z} {l} {w} {h} {rotation} \n"
+                        f.write(content)
+            if current_token == last_token:
+                break
+
+            next_token = current_sample['next']
+            current_token = next_token
+            frame_id += 1
+
 def initialize_bev_detector(cfg_file, ckpoint):
     # Choose to use a config and initialize the detector
     config = cfg_file
@@ -401,6 +437,8 @@ def generate_nusc_data(version, dataset_dir, cfg, checkpoint, output_dir, eval_o
 
         print("Data written to detection_result.json successfully!")
     
+    generate_gt_labels(nusc, gt_dir, val_scenes, sequences_by_name)
+
     with open(result_file) as f:
         result = json.load(f)
     
@@ -409,17 +447,20 @@ def generate_nusc_data(version, dataset_dir, cfg, checkpoint, output_dir, eval_o
         path = pred_dir / frame_path
         f = open(path, "a")
         for detection in result['results'][frame]:
-            x, y, z = detection['translation']
-            w, l, h = detection['size']
-            class_name = 'vehicle'
-            rotation = Quaternion(np.array(detection['rotation'])).radians
-            score = detection['detection_score']
-            content = f"{class_name} {x} {y} {z} {l} {w} {h} {rotation} {score} \n"
-            f.write(content)
+            if detection['detection_name'] in ['car', 'truck', 'bus']:
+                x, y, z = detection['translation']
+                w, l, h = detection['size']
+                class_name = detection['detection_name']
+                rotation = Quaternion(np.array(detection['rotation'])).radians
+                score = detection['detection_score']
+                content = f"{class_name} {x} {y} {z} {l} {w} {h} {rotation} {score} \n"
+                f.write(content)
 
     NuScenesEval(str(pred_dir), str(gt_dir), "class x y z l w h r score" , str(output_dir),
+                 classes=['car', 'bus', 'truck'],   
                  max_range=0.0,
                  min_score=0.0)
+
     # cfg = config_factory('detection_cvpr_2019')
     # verbose = True
     # nusc_eval = NuScenesEval(
