@@ -59,4 +59,3 @@ This implementation of Geometric3DBBox uses resources and tools from:
 - [Lang SAM](https://github.com/luca-medeiros/lang-segment-anything.git)
 - [MMRotate](https://github.com/open-mmlab/mmrotate.git)
 - [NuScenes dev kit](https://github.com/nutonomy/nuscenes-devkit.git)
-``
